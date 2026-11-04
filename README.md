@@ -16,7 +16,7 @@ inputs.delta-cli.url = "github:Samuka007/delta-cli-nix";
 inputs.delta-cli.inputs.nixpkgs.follows = "nixpkgs";
 ```
 
-Then add `inputs.delta-cli.packages.${pkgs.stdenv.hostPlatform.system}.delta-cli`
+Then add `inputs.delta-cli.packages.${pkgs.stdenv.hostPlatform.system}.delta`
 to `environment.systemPackages` (NixOS) or `home.packages` (Home Manager).
 
 Requires `config.allowUnfree = true` — Delta is proprietary.
@@ -53,6 +53,35 @@ Upgrade by updating the flake input, not with `delta update`.
 To bump: replace `releases.json` with the current
 [upstream manifest](https://github.com/zed-industries/delta-nix/blob/main/releases.json)
 and rebuild. The tarball URL and hash are read from it, so nothing else changes.
+
+## Coexisting with the `delta` git pager
+
+Both this package and nixpkgs' `delta` (dandavison's syntax-highlighting pager)
+provide `bin/delta`. Installing both in the same profile is a hard conflict —
+`buildEnv` refuses to build:
+
+```
+pkgs.buildEnv error: two given paths contain a conflicting subpath: bin/delta
+```
+
+Give the CLI precedence, which keeps the pager available for `git config
+core.pager` while `delta` on PATH is the Delta CLI:
+
+```nix
+home.packages = [
+  pkgs.delta
+  (pkgs.lib.hiPrio inputs.delta-cli.packages.${pkgs.stdenv.hostPlatform.system}.delta)
+];
+```
+
+Verified: the resulting `bin/delta` is the Delta CLI (`delta --json thread
+contract` → `min/max 8`) rather than the pager. To keep the pager on `delta`
+and call the CLI explicitly instead, drop `hiPrio` and put the pager first;
+the CLI is then reachable through its own binary path.
+
+Note this means the pager must be invoked as `delta` only when it wins PATH.
+If you rely on `git config core.pager delta`, point it at the pager's store
+path so it does not depend on PATH ordering.
 
 ## Notes
 
